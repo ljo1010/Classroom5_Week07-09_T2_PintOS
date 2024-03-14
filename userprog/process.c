@@ -50,6 +50,13 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	// ********************************************** //
+	// [MOD; ARGUMENT PASSING IMPL]
+	// DESCRIPTION using string tokenizer to extract file name
+	char *save_ptr;
+	strtok_r(file_name, " ", &save_ptr);
+	// ********************************************** //
+
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -176,8 +183,30 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	// ********************************************** //
+	// [MOD; ARGUMENT PASSING IMPL]
+	char *parse[64];
+	char *save_ptr;
+	char *token = strtok_r(file_name, " ", &save_ptr);
+	int idx = 0;
+
+	while(token != NULL) {
+		parse[idx++] = token;
+		token = strtok_r(NULL, " ", &save_ptr);
+	}
+	// ********************************************** //
+
 	/* And then load the binary */
 	success = load (file_name, &_if);
+
+	// ********************************************** //
+	// [MOD; ARGUMENT PASSING IMPL]
+	process_argument_stack(parse, idx, &_if.rsp);
+	_if.R.rdi = idx;
+	_if.R.rsi = (char *)_if.rsp + 8;
+
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
+	// ********************************************** //
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -204,6 +233,8 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+
+	for(int i = 0; i < 100000000; i++) { }
 	return -1;
 }
 
@@ -256,6 +287,37 @@ process_activate (struct thread *next) {
 	/* Set thread's kernel stack for use in processing interrupts. */
 	tss_update (next);
 }
+
+// ********************************************** //
+// [MOD; ARGUMENT PASSING IMPL]
+void process_argument_stack(char **parse, int idx, void **rsp) {
+	int padding;
+
+	for(int i = idx - 1; i > -1; i--) {
+		for(int j = strlen(parse[i]); j > -1; j--) {
+			(*rsp)--;
+			**(char **)rsp = parse[i][j];
+		}
+		parse[i] = *(char **)rsp;
+	}
+
+	padding = (int)*rsp % 8;
+	for(int k = 0; k < padding; k++) {
+		(*rsp)--;
+		**(uint8_t **)rsp = 0;
+	}
+
+	(*rsp) -= 8;
+	**(char ***)rsp = 0;
+	for(int x = idx - 1; x > -1; x--) {
+		(*rsp) -= 8;
+		**(char ***)rsp = parse[x];
+	}
+
+	(*rsp) -= 8;
+	**(void ***)rsp = 0;
+}
+// ********************************************** //
 
 /* We load ELF binaries.  The following definitions are taken
  * from the ELF specification, [ELF1], more-or-less verbatim.  */

@@ -40,7 +40,36 @@ syscall_init (void) {
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
+	// ********************************************** //
+	// [MOD; SYSTEM CALL IMPL]
+	// case SYS_EXEC:
+	// 	f->R.rax = exec(f->R.rdi);
+	// 	break;
+	// ********************************************** //
 	printf ("system call!\n");
 	thread_exit ();
+}
+
+int
+exec(const char *cmd) {
+	check_address(cmd);
+
+	char *cmd_temp = palloc_get_page(0);
+
+	if(cmd_temp == NULL)
+		exit(-1);
+	strlcpy(cmd_temp, cmd, PGSIZE);
+
+	if(process_exec(cmd_temp) == -1)
+		exit(-1);
+}
+
+int
+fork(const char *thread_name, struct intr_frame *i_frame) {
+	return process_fork(thread_name, i_frame);
+}
+
+tid_t
+process_fork(const char *thread_name, struct intr_frame *i_frame) {
+	return thread_create(thread_name, PRI_DEFAULT, __do_fork, thread_current());
 }
