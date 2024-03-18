@@ -2,6 +2,8 @@
     "files.associations": {
         "inttypes.h": "c",
         "stdio.h": "c",
-        "interrupt.h": "c"
+        "interrupt.h": "c",
+        "stddef.h": "c",
+        "gdt.h": "c"
     }
 }

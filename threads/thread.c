@@ -245,7 +245,15 @@ thread_create (const char *name, int priority, thread_func *function, void *aux)
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
-	/* Add to run queue. */
+	// ********************************************** //
+	// [MOD; . IMPL]
+	list_push_back(&thread_current()->child_list, &t->child_elem);
+
+	t->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	if(t->fdt == NULL)
+		return TID_ERROR;
+	// ********************************************** //
+	
 	thread_unblock (t);
 	// ********************************************** //
 	// [MOD; MLFQS IMPL]
@@ -746,6 +754,16 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
 	list_push_back(&all_list, &t->all_elem);
+	// ********************************************** //
+
+	// ********************************************** //
+	// [MOD; . IMPL]
+	t->exit_status = 0;
+	t->next_fd = 2;
+	sema_init(&t->load_sema, 0);
+	sema_init(&t->exit_sema, 0);
+	sema_init(&t->wait_sema, 0);
+	list_init(&(t->child_list));
 	// ********************************************** //
 }
 

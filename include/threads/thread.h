@@ -4,6 +4,10 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+// ********************************************** //
+// [MOD; . IMPL]
+#include "threads/synch.h"
+// ********************************************** //
 #include "threads/interrupt.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -27,6 +31,12 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+// ********************************************** //
+// [MOD; . IMPL]
+#define FDT_PAGES	1	// 2
+#define FDT_LIMIT	128
+// ********************************************** //
 
 // ********************************************** //
 // [MOD; MLFQS IMPL]
@@ -113,6 +123,17 @@ struct thread {
 	int nice;
 	int recent_cpu;
 	struct list_elem all_elem;
+	// [MOD; . IMPL]
+	int exit_status;
+	int next_fd;
+	struct file **fdt;
+	struct file *running;
+	struct intr_frame parent_if;
+	struct list child_list;
+	struct list_elem child_elem;
+	struct semaphore load_sema;
+	struct semaphore exit_sema;
+	struct semaphore wait_sema;
 	// ********************************************** //
 
 	/* Shared between thread.c and synch.c. */
