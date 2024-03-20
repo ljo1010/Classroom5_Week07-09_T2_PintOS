@@ -34,7 +34,7 @@ process_init (void) {
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
- * The new thread may be scheduled (and may even exit)
+ * The new thread may be scheduled (and may even exi`t)
  * before process_create_initd() returns. Returns the initd's
  * thread id, or TID_ERROR if the thread cannot be created.
  * Notice that THIS SHOULD BE CALLED ONCE. */
@@ -45,10 +45,13 @@ process_create_initd (const char *file_name) {
 
 	/* Make a copy of FILE_NAME.
 	 * Otherwise there's a race between the caller and load(). */
-	fn_copy = palloc_get_page (0);
+	fn_copy = palloc_get_page (PGSIZE);
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+
+	char *save_ptr;
+    strtok_r(file_name, " ", &save_ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -165,24 +168,61 @@ process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
-	/* We cannot use the intr_frame in the thread structure.
-	 * This is because when current thread rescheduled,
-	 * it stores the execution information to the member. */
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* We first kill the current context */
 	process_cleanup ();
 
-	/* And then load the binary */
-	success = load (file_name, &_if);
+	int argc = 0;
+	char *argv[64];
+	char *ret_ptr, *next_ptr;
 
-	/* If load failed, quit. */
-	palloc_free_page (file_name);
+	ret_ptr = strtok_r(file_name, " ", &next_ptr);
+	while (ret_ptr)
+	{
+		argv[argc++] = ret_ptr;
+		ret_ptr = strtok_r(NULL, " ", &next_ptr);
+	}
+
+	success = load (argv[0], &_if);
 	if (!success)
 		return -1;
+
+	int padding = 0;
+
+	for(int i = 0; i < argc; i++) 
+	{
+		int argv_len = strlen(argv[i]) + 1;
+		_if.rsp -= argv_len;
+		memcpy(_if.rsp, argv[i], argv_len);
+		argv[i] = (char *)_if.rsp;
+		padding += argv_len;
+	}
+	if(padding % 8 != 0)
+	{
+		_if.rsp -= 8-(padding % 8);
+		memset(_if.rsp, 0, 8-(padding % 8));
+	}
+
+	_if.rsp -= 8;
+	memset(_if.rsp, 0, 8);
+
+	for(int j = argc-1; j >= 0; j--)
+	{
+		_if.rsp -= 8;
+		memcpy(_if.rsp, &argv[j], 8);
+	}
+
+	_if.rsp -= 8;
+	memset(_if.rsp, 0, 8);
+
+	_if.R.rsi = _if.rsp+8;
+	_if.R.rdi = argc;
+	
+	palloc_free_page (file_name);
+
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -204,6 +244,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	timer_sleep(10);
 	return -1;
 }
 
@@ -328,12 +369,12 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
+	
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
@@ -413,9 +454,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
-
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
 	success = true;
 

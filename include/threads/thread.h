@@ -2,6 +2,7 @@
 #define THREADS_THREAD_H
 
 #include <debug.h>
+#include "filesys/file.h"
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
@@ -113,6 +114,10 @@ struct thread {
 	int nice;
 	int recent_cpu;
 	struct list_elem all_elem;
+	int exit_status;
+
+	int fd;
+	struct file *file_list[8];
 	// ********************************************** //
 
 	/* Shared between thread.c and synch.c. */
